@@ -47,6 +47,9 @@ if (LIBUSB_1_LIBRARIES AND LIBUSB_1_INCLUDE_DIRS)
   # in cache already
   set(LIBUSB_FOUND TRUE)
 else (LIBUSB_1_LIBRARIES AND LIBUSB_1_INCLUDE_DIRS)
+  if(NOT LIBUSB_ROOT)
+	set(LIBUSB_ROOT "C:\\Program Files\\libusb")  # Default search path in Windows.
+  endif()
   find_path(LIBUSB_1_INCLUDE_DIR
     NAMES
 	libusb.h
@@ -55,10 +58,13 @@ else (LIBUSB_1_LIBRARIES AND LIBUSB_1_INCLUDE_DIRS)
       /usr/local/include
       /opt/local/include
       /sw/include
+	  ${LIBUSB_ROOT}
+	  ${LIBUSB_ROOT}/libusb
 	PATH_SUFFIXES
 	  libusb-1.0
   )
 
+  # TODO: Windows directories from https://github.com/cboulay/PSMoveService/blob/master/cmake/FindUSB1.cmake
   find_library(LIBUSB_1_LIBRARY
     NAMES
       usb-1.0 usb

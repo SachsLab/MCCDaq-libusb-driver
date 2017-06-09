@@ -8,7 +8,7 @@ cmake_policy(SET CMP0042 NEW) # ENABLE CMP0042: MACOSX_RPATH is enabled by defau
 
 # Third party packages
 # libusb        TODO: Consider using ExternalProject_Add on Windows
-# set(LIBUSB_ROOT ${CMAKE_CURRENT_LIST_DIR})  # TODO: Test on Windows.
+set(LIBUSB_ROOT "E:\\SachsLab\\Tools\\Misc\\libusb")
 find_package(libusb-1.0 REQUIRED)
 # Platform-specific libs
 SET(PLATFORM_LIBS)
