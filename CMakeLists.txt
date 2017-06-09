@@ -7,10 +7,11 @@ LIST(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_LIST_DIR}/cmake")
 cmake_policy(SET CMP0042 NEW) # ENABLE CMP0042: MACOSX_RPATH is enabled by default.
 
 # Third party packages
-SET(PLATFORM_LIBS)
 # libusb        TODO: Consider using ExternalProject_Add on Windows
 # set(LIBUSB_ROOT ${CMAKE_CURRENT_LIST_DIR})  # TODO: Test on Windows.
-find_package(USB1 REQUIRED)
+find_package(libusb-1.0 REQUIRED)
+# Platform-specific libs
+SET(PLATFORM_LIBS)
 IF(${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
     find_library(IOKIT_FRAMEWORK IOKit)
     find_library(COREFOUNDATION_FRAMEWORK CoreFoundation)
@@ -18,7 +19,6 @@ IF(${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
         ${COREFOUNDATION_FRAMEWORK}
         ${IOKIT_FRAMEWORK})
 ENDIF()
-# TODO: Linux include pthread udev
 
 # Target executable
 add_library(${PROJECT_NAME} SHARED
@@ -27,10 +27,10 @@ add_library(${PROJECT_NAME} SHARED
 
 target_include_directories(${PROJECT_NAME} PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}
-    ${LIBUSB_INCLUDE_DIR}
+    ${LIBUSB_1_INCLUDE_DIRS}
 )
 
 target_link_libraries(${PROJECT_NAME}
+    ${LIBUSB_1_LIBRARIES}
     ${PLATFORM_LIBS}
-    ${LIBUSB_LIBRARIES}
 )
