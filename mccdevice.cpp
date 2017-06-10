@@ -12,6 +12,125 @@
 #include <libusb.h>
 #include "mccdevice.h"
 
+/* These definitions are used to build the request type in usb_control_msg */
+#define MCC_VID         (0x09db)  // Vendor ID for Measurement Computing
+#define CTRL_IN         (LIBUSB_REQUEST_TYPE_VENDOR | LIBUSB_ENDPOINT_IN)
+#define CTRL_OUT        (LIBUSB_REQUEST_TYPE_VENDOR | LIBUSB_ENDPOINT_OUT)
+#define INTR_LENGTH     64
+
+#define  INPUT_REPORT   (1 << 8)
+#define  OUTPUT_REPORT  (2 << 8)
+
+/* Digital I/O Commands */
+#define DTRISTATE     (0x00)   // Read/Write Tristate register
+#define DPORT         (0x01)   // Read digital port pins
+#define DLATCH        (0x02)   // Read/Write Digital port output latch register
+
+/* Description of the requestType byte */
+// Data transfer direction D7;  libusb_endpoint_direction
+//#define HOST_TO_DEVICE (0x0 << 7)  // LIBUSB_ENDPOINT_IN
+//#define DEVICE_TO_HOST (0x1 << 7)  // LIBUSB_ENDPOINT_OUT
+// Type D5-D6; libusb_request_type
+//#define STANDARD_TYPE (0x0 << 5)  // LIBUSB_REQUEST_TYPE_STANDARD
+//#define CLASS_TYPE    (0x1 << 5)  // LIBUSB_REQUEST_TYPE_CLASS
+//#define VENDOR_TYPE   (0x2 << 5)  // LIBUSB_REQUEST_TYPE_VENDOR
+//#define RESERVED_TYPE (0x3 << 5)
+// Recipient D0 - D4; libusb_request_recipient
+//#define DEVICE_RECIPIENT    (0x0)  // LIBUSB_RECIPIENT_DEVICE
+//#define INTERFACE_RECIPIENT (0x1)  // LIBUSB_RECIPIENT_INTERFACE
+//#define ENDPOINT_RECIPIENT  (0x2)  // LIBUSB_RECIPIENT_ENDPOINT
+//#define OTHER_RECIPIENT     (0x3)  // LIBUSB_RECIPIENT_OTHER
+//#define RESERVED_RECIPIENT  (0x4)
+
+/* MDB Control Transfers */
+#define MAX_MESSAGE_LENGTH 64      // max length of MBD Packet in bytes
+                                   // Request types:
+#define STRING_MESSAGE     (0x80)  // Send string messages to the device
+#define RAW_DATA           (0x81)  // Return RAW data from the device
+#define FPGADATAREQUEST    (0x51)
+#define HS_DELAY            1000   // wjasper uses 20
+
+mcc_err libUSBError(int err)
+{
+    switch(err)
+    {
+        case LIBUSB_ERROR_TIMEOUT:
+            return MCC_ERR_LIBUSB_TIMEOUT;
+        case LIBUSB_ERROR_PIPE:
+            return MCC_ERR_PIPE;
+        case LIBUSB_ERROR_NO_DEVICE:
+            return MCC_ERR_NO_DEVICE;
+        default:
+            return MCC_ERR_UNKNOWN_LIB_USB_ERR;
+    }
+}
+
+std::string errorString(int err)
+{
+    std::stringstream unknownerror;
+    
+    switch(err)
+    {
+        case MCC_ERR_ACCESS:
+            return "Insufficient USB permisions\n";
+        case MCC_ERR_NO_DEVICE:
+            return "No Matching Device Found\n";
+        case MCC_ERR_INVALID_ID:
+            return "Invalid Device ID\n";
+        case MCC_ERR_USB_INIT:
+            return "Failed to Init USB\n";
+        case MCC_ERR_PIPE:
+            return "Libusb Pipe Error, possibly invalid command\n";
+        case MCC_ERR_LIBUSB_TIMEOUT:
+            return "Transfer Timed Out\n";
+        case MCC_ERR_UNKNOWN_LIB_USB_ERR:
+            return "Unknown LibUSB Error\n";
+        case MCC_ERR_INVALID_BUFFER_SIZE:
+            return "Buffer must be and integer multiple of 32\n";
+        case MCC_ERR_CANT_OPEN_FPGA_FILE:
+            return "Cannot open FPGA file\n";
+        case MCC_ERR_FPGA_UPLOAD_FAILED:
+            return "FPGA firmware could not be uploaded\n";
+        default:
+            unknownerror << "Error number " << err << " has no text\n";
+            return unknownerror.str();
+    }
+}
+
+static std::string toNameString(int idProduct)
+{
+    switch(idProduct)
+    {
+        case USB_2001_TC:
+            return "USB-2001-TC";
+        case USB_7202:
+            return "USB-7202";
+        case USB_7204:
+            return "USB-7204";
+        case USB_1608_GX:
+            return "USB-1608GX";
+        case USB_1608_GX_2AO:
+            return "USB-1608GX-2AO";
+        case USB_1608_FS_PLUS:
+            return "USB-1608-FS-PLUS";
+        default:
+            return "Invalid Product ID";
+    }
+}
+
+static bool isMCCProduct(int idProduct)
+{
+    switch(idProduct)
+    {
+        case USB_2001_TC: case USB_7202: case USB_7204:
+        case USB_1608_FS_PLUS: case USB_1608_GX: case USB_1608_GX_2AO://same for all products
+            return true;
+        default:
+            return false;
+            break;
+    }
+}
+
 
 //Constructor finds the first available device where product ID == idProduct and optionally serial number == mfgSerialNumber
 MCCDevice::MCCDevice(int idProduct)
@@ -134,13 +253,11 @@ void MCCDevice::initDevice(int idProduct, std::string mfgSerialNumber){
 void MCCDevice::getScanParams()
 {
     int numBytesTransferred;
-    
-    //unsigned char* epDescriptor = new unsigned char[64]; //endpoint descriptor
-    unsigned char epDescriptor[64]; //Is this preferred to above when size is constant?
-    
-    numBytesTransferred = libusb_control_transfer(dev_handle, STRINGMESSAGE, LIBUSB_REQUEST_GET_DESCRIPTOR,
-                                                  (0x02 << 8) | 0, 0, epDescriptor, 64, 1000);
-    //http://libusb.sourceforge.net/api-1.0/group__syncio.html
+    unsigned char epDescriptor[MAX_MESSAGE_LENGTH];
+    uint8_t requesttype = (LIBUSB_ENDPOINT_OUT | LIBUSB_REQUEST_TYPE_STANDARD | LIBUSB_RECIPIENT_DEVICE);
+    uint16_t wValue = (0x02 << 8) | 0;  // I have no idea where this comes from.
+    numBytesTransferred = libusb_control_transfer(dev_handle, requesttype, LIBUSB_REQUEST_GET_DESCRIPTOR,
+                                                  wValue, 0, epDescriptor, MAX_MESSAGE_LENGTH, HS_DELAY);
     
     if(numBytesTransferred < 0)
         throw libUSBError(numBytesTransferred);
@@ -149,8 +266,6 @@ void MCCDevice::getScanParams()
     endpoint_in = getEndpointInAddress(epDescriptor, numBytesTransferred);
     endpoint_out = getEndpointOutAddress(epDescriptor, numBytesTransferred);
     bulkPacketSize = getBulkPacketSize(epDescriptor, numBytesTransferred);
-    
-    //delete[] epDescriptor;
 }
 
 //Find the input endpoint from an endpoint descriptor
@@ -255,8 +370,8 @@ std::string MCCDevice::sendMessage(std::string message)
 {
     try
     {
-        sendControlTransfer(message);
-        return getControlTransfer();
+        sendControlTransferString(message);
+        return getControlTransferString();
     }
     catch(mcc_err err)
     {
@@ -265,25 +380,23 @@ std::string MCCDevice::sendMessage(std::string message)
 }
 
 //Send a message to the device
-void MCCDevice::sendControlTransfer(std::string message)
+void MCCDevice::sendControlTransferString(std::string message)
 {
     int numBytesTransferred;
     
     //StringUtil::toUpper(message);
     //TODO: Convert message toUpper
     
-    //cout << "Sending: " << message << "\n";
-    
-    //Convert message to data, a char array exactly MAX_MESSAGE_LENGTH (64) long. Pad with zeros if necessary.
-    uint16_t length = message.length();
-    const char* msgData = message.data();
+    //std::cout << "Sending: " << message << std::endl;
     unsigned char data[MAX_MESSAGE_LENGTH]; //64
-    for (uint16_t i = 0; i < MAX_MESSAGE_LENGTH; i++) {
-        data[i] = (i < length) ? msgData[i] : 0;
-    }
+    copy( message.begin(), message.end(), data );
+    data[MAX_MESSAGE_LENGTH - 1] = '\0';
+    //std::cout << "Message data: " << data << std::endl;
     
-    numBytesTransferred = libusb_control_transfer(dev_handle, LIBUSB_REQUEST_TYPE_VENDOR + LIBUSB_ENDPOINT_OUT,
-                                                  STRINGMESSAGE, 0, 0, data, MAX_MESSAGE_LENGTH, 1000);
+    uint8_t requesttype = (LIBUSB_ENDPOINT_IN | LIBUSB_REQUEST_TYPE_VENDOR | LIBUSB_RECIPIENT_DEVICE);
+    numBytesTransferred = libusb_control_transfer(dev_handle, requesttype,
+                                                  STRING_MESSAGE, 0, 0, data,
+                                                  MAX_MESSAGE_LENGTH, HS_DELAY);
     
     if(numBytesTransferred < 0)
         throw libUSBError(numBytesTransferred);
@@ -291,21 +404,21 @@ void MCCDevice::sendControlTransfer(std::string message)
 
 //Receive a message from the device. This should follow a call to sendControlTransfer.
 //It will return a pointer to at most a 64 character array.
-std::string MCCDevice::getControlTransfer()
+std::string MCCDevice::getControlTransferString()
 {
     int messageLength;
-    unsigned char message[64];
-    std::string strmessage;
-    
-    messageLength = libusb_control_transfer(dev_handle,  LIBUSB_REQUEST_TYPE_VENDOR + LIBUSB_ENDPOINT_IN,
-                                            STRINGMESSAGE, 0, 0, message, 64, 1000);
-    
+    unsigned char message[MAX_MESSAGE_LENGTH];
+    std::string out_string;
+    uint8_t requesttype = (LIBUSB_ENDPOINT_OUT | LIBUSB_REQUEST_TYPE_VENDOR | LIBUSB_RECIPIENT_DEVICE);
+    messageLength = libusb_control_transfer(dev_handle,  requesttype,
+                                            STRING_MESSAGE, 0, 0, message,
+                                            MAX_MESSAGE_LENGTH, HS_DELAY);
     if(messageLength < 0)
         throw libUSBError(messageLength);
     
-    strmessage = (char*)message;
-    //cout << "Got: " << strmessage << "\n\n";
-    return strmessage; //e.g. DEV:MFGSER=018FF921 in response to ?DEV:MFGSER
+    out_string = (char*)message;
+    //std::cout << "Got: " << return_string << "\n\n";
+    return out_string; //e.g. DEV:MFGSER=018FF921 in response to ?DEV:MFGSER
 }
 
 
@@ -323,7 +436,7 @@ void MCCDevice::readScanData(unsigned short* data, int length)
         //TODO: Convert to asynchronous I/O API
         err =  libusb_bulk_transfer(dev_handle, endpoint_in, &dataAsByte[totalTransferred], bulkPacketSize, &transferred, timeout);
         totalTransferred += transferred;
-        //cout << "Transferred " << totalTransferred << "of " << length*2 << endl;
+        //std::cout << "Transferred " << totalTransferred << "of " << length*2 << std::endl;
         /*if(err == LIBUSB_ERROR_TIMEOUT && transferred > 0)//a timeout may indicate that some data was transferred, but not all
          err = 0;*/
     }while (totalTransferred < length*2 && err >= 0); //TODO: Change 2 to bytes per sample.
@@ -453,3 +566,72 @@ void MCCDevice::flushInputData()
     } while (bytesTransfered > 0 && status == 0);
     delete[] buf;
 }
+
+uint8_t MCCDevice::getDIOTristate()
+{
+    uint8_t requesttype = (LIBUSB_ENDPOINT_OUT | LIBUSB_REQUEST_TYPE_VENDOR | LIBUSB_RECIPIENT_DEVICE);
+    uint8_t data = 0x0;
+    int res = libusb_control_transfer(dev_handle, requesttype, DTRISTATE,
+                                      0x0, 0x0, (unsigned char *) &data,
+                                      sizeof(data), HS_DELAY);
+    if (res < 0)
+    {
+        throw libUSBError(res);
+    }
+    return data;
+}
+
+void MCCDevice::setDIOTristate(uint8_t chanMask)
+{
+    uint8_t requesttype = (LIBUSB_ENDPOINT_IN | LIBUSB_REQUEST_TYPE_VENDOR | LIBUSB_RECIPIENT_DEVICE);
+    int res = libusb_control_transfer(dev_handle, requesttype, DTRISTATE,
+                                      chanMask, 0x0, NULL, 0x0, HS_DELAY);
+    if (res < 0)
+    {
+        throw libUSBError(res);
+    }
+}
+
+uint8_t MCCDevice::getDIOPort()
+{
+    uint8_t requesttype = (LIBUSB_ENDPOINT_OUT | LIBUSB_REQUEST_TYPE_VENDOR | LIBUSB_RECIPIENT_DEVICE);
+    uint8_t data;
+    int res = libusb_control_transfer(dev_handle, requesttype, DPORT,
+                                      0x0, 0x0, (unsigned char *) &data,
+                                      sizeof(data), HS_DELAY);
+    if (res < 0)
+    {
+        throw libUSBError(res);
+    }
+    return data;
+}
+
+uint8_t MCCDevice::getDIOLatch()
+{
+    uint8_t requesttype = (LIBUSB_ENDPOINT_OUT | LIBUSB_REQUEST_TYPE_VENDOR | LIBUSB_RECIPIENT_DEVICE);
+    uint8_t data;
+    int res = libusb_control_transfer(dev_handle, requesttype, DLATCH,
+                                      0x0, 0x0, (unsigned char *) &data,
+                                      sizeof(data), HS_DELAY);
+    if (res < 0)
+    {
+        throw libUSBError(res);
+    }
+    return data;
+}
+
+void MCCDevice::setDIOLatch(uint8_t value)
+{
+    uint8_t requesttype = (LIBUSB_ENDPOINT_IN | LIBUSB_REQUEST_TYPE_VENDOR | LIBUSB_RECIPIENT_DEVICE);
+    int res = libusb_control_transfer(dev_handle, requesttype, DLATCH, value,
+                                      0x0, NULL, 0x0, HS_DELAY);
+    if (res < 0)
+    {
+        throw libUSBError(res);
+    }
+}
+
+
+
+
+

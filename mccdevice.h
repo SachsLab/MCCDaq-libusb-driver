@@ -3,6 +3,9 @@
 //  This is a modified version of the libusb-enabled C++ driver found
 //  on the MeasurementComputing site: http://kb.mccdaq.com/KnowledgebaseArticle50047.aspx
 //  I have modified it to only do synchronous polling and to allow for variable packet sizes.
+//  The messages can be found here: http://www.mccdaq.com/pdfs/manuals/DAQFlex%20Software.pdf
+//  There is a more complete open source driver available but I find mine a
+//  little easier to use: https://github.com/wjasper/Linux_Drivers/blob/master/USB/mcc-libusb/usb-1608FS-Plus.c
 //
 //  Created by Chadwick Boulay on 2014-03-12.
 //
@@ -39,10 +42,6 @@
 ///////////
 //Constants
 ///////////
-#define STRINGMESSAGE 0x80
-#define FPGADATAREQUEST 0x51
-#define RAWDATA 0x81
-#define MAX_MESSAGE_LENGTH 64
 #define MCC_VENDOR_ID 0x09db
 //Device Product IDs
 #define USB_2001_TC 0x00F9
@@ -82,88 +81,15 @@ enum mcc_err{
 //////////////////
 
 //Convert a libusb error code into an mcc_err
-static mcc_err libUSBError(int err)
-{
-    switch(err)
-    {
-        case LIBUSB_ERROR_TIMEOUT:
-            return MCC_ERR_LIBUSB_TIMEOUT;
-        case LIBUSB_ERROR_PIPE:
-            return MCC_ERR_PIPE;
-        case LIBUSB_ERROR_NO_DEVICE:
-            return MCC_ERR_NO_DEVICE;
-        default:
-            return MCC_ERR_UNKNOWN_LIB_USB_ERR;
-    }
-};
+static mcc_err libUSBError(int err);
 
 //Convert an mcc_err int to a human readable string
-static std::string errorString(int err)
-{
-    std::stringstream unknownerror;
-    
-    switch(err)
-    {
-        case MCC_ERR_ACCESS:
-            return "Insufficient USB permisions\n";
-        case MCC_ERR_NO_DEVICE:
-            return "No Matching Device Found\n";
-        case MCC_ERR_INVALID_ID:
-            return "Invalid Device ID\n";
-        case MCC_ERR_USB_INIT:
-            return "Failed to Init USB\n";
-        case MCC_ERR_PIPE:
-            return "Libusb Pipe Error, possibly invalid command\n";
-        case MCC_ERR_LIBUSB_TIMEOUT:
-            return "Transfer Timed Out\n";
-        case MCC_ERR_UNKNOWN_LIB_USB_ERR:
-            return "Unknown LibUSB Error\n";
-        case MCC_ERR_INVALID_BUFFER_SIZE:
-            return "Buffer must be and integer multiple of 32\n";
-        case MCC_ERR_CANT_OPEN_FPGA_FILE:
-            return "Cannot open FPGA file\n";
-        case MCC_ERR_FPGA_UPLOAD_FAILED:
-            return "FPGA firmware could not be uploaded\n";
-        default:
-            unknownerror << "Error number " << err << " has no text\n";
-            return unknownerror.str();
-    }
-};
+static std::string errorString(int err);
 
-static std::string toNameString(int idProduct)
-{
-    switch(idProduct)
-    {
-        case USB_2001_TC:
-            return "USB-2001-TC";
-        case USB_7202:
-            return "USB-7202";
-        case USB_7204:
-            return "USB-7204";
-        case USB_1608_GX:
-            return "USB-1608GX";
-        case USB_1608_GX_2AO:
-            return "USB-1608GX-2AO";
-        case USB_1608_FS_PLUS:
-            return "USB-1608-FS-PLUS";
-        default:
-            return "Invalid Product ID";
-    }
-};
+static std::string toNameString(int idProduct);
 
 //Is the specified product ID is an MCC product ID? Called when initializing.
-static bool isMCCProduct(int idProduct)
-{
-    switch(idProduct)
-    {
-        case USB_2001_TC: case USB_7202: case USB_7204:
-        case USB_1608_FS_PLUS: case USB_1608_GX: case USB_1608_GX_2AO://same for all products
-            return true;
-        default:
-            return false;
-            break;
-    }
-};
+static bool isMCCProduct(int idProduct);
 
 /////////
 //Classes
@@ -201,6 +127,12 @@ public:
     void reconfigure(); //Called during initialization, should be called again after any settings are changed.
     float scaleAndCalibrateData(unsigned short data, int chanIdx);
     //static short calData(unsigned short data, int slope, int offset);//?
+    uint8_t getDIOTristate();
+    void setDIOTristate(uint8_t chanMask);
+    uint8_t getDIOPort();
+    uint8_t getDIOLatch();
+    void setDIOLatch(uint8_t value);
+    
     float sampRate;
     unsigned short* mData;
     int mSamplesPerBlock;
@@ -238,8 +170,8 @@ private:
     void initDevice(int idProduct, std::string mfgSerialNumber);//Called by constructors.
     void getScanParams(); //Called during initialization. sets endpoint_in, endpoint_out, bulkPacketSize
     //void getLimits(); //Called during initialization. Gets chan range, scan rate, etc.
-    void sendControlTransfer(std::string message);//Called by sendMessage
-    std::string getControlTransfer();//Called by sendMessage
+    void sendControlTransferString(std::string message);//Called by sendMessage
+    std::string getControlTransferString();//Called by sendMessage
     
     //static unsigned int getNumRanges();//?
     
