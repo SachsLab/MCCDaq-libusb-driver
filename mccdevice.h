@@ -76,7 +76,6 @@ enum mcc_err{
     MCC_ERR_ACCESS,
 };
 
-using namespace std;
 
 //////////////////
 //Static functions
@@ -99,9 +98,9 @@ static mcc_err libUSBError(int err)
 };
 
 //Convert an mcc_err int to a human readable string
-static string errorString(int err)
+static std::string errorString(int err)
 {
-    stringstream unknownerror;
+    std::stringstream unknownerror;
     
     switch(err)
     {
@@ -131,7 +130,7 @@ static string errorString(int err)
     }
 };
 
-static string toNameString(int idProduct)
+static std::string toNameString(int idProduct)
 {
     switch(idProduct)
     {
@@ -192,10 +191,10 @@ class MCCDevice
 {
 public:
     MCCDevice(int idProduct);
-    MCCDevice(int idProduct, string mfgSerialNumber);
+    MCCDevice(int idProduct, std::string mfgSerialNumber);
     ~MCCDevice();
     
-    string sendMessage(string message);
+    std::string sendMessage(std::string message);
     void flushInputData();
     void readScanData(unsigned short* data, int length);//, int rate);
     void getBlock();
@@ -236,11 +235,11 @@ private:
     //intTransferInfo* transferInfo;//?
     
     // Methods
-    void initDevice(int idProduct, string mfgSerialNumber);//Called by constructors.
+    void initDevice(int idProduct, std::string mfgSerialNumber);//Called by constructors.
     void getScanParams(); //Called during initialization. sets endpoint_in, endpoint_out, bulkPacketSize
     //void getLimits(); //Called during initialization. Gets chan range, scan rate, etc.
-    void sendControlTransfer(string message);//Called by sendMessage
-    string getControlTransfer();//Called by sendMessage
+    void sendControlTransfer(std::string message);//Called by sendMessage
+    std::string getControlTransfer();//Called by sendMessage
     
     //static unsigned int getNumRanges();//?
     

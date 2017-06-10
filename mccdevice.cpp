@@ -12,16 +12,15 @@
 #include <libusb.h>
 #include "mccdevice.h"
 
-using namespace std;
 
 //Constructor finds the first available device where product ID == idProduct and optionally serial number == mfgSerialNumber
 MCCDevice::MCCDevice(int idProduct)
 {
-    string mfgSerialNumber = "NULL";
+    std::string mfgSerialNumber = "NULL";
     initDevice(idProduct, mfgSerialNumber);
 }
 
-MCCDevice::MCCDevice(int idProduct, string mfgSerialNumber)
+MCCDevice::MCCDevice(int idProduct, std::string mfgSerialNumber)
 {
     initDevice(idProduct, mfgSerialNumber);
 }
@@ -43,14 +42,14 @@ MCCDevice::~MCCDevice () {
 
 //Find the device, opens it, and claims it. Called by constructors.
 //Sets idProduct, maxCounts, list, dev_handle
-void MCCDevice::initDevice(int idProduct, string mfgSerialNumber){
+void MCCDevice::initDevice(int idProduct, std::string mfgSerialNumber){
     int i;
     bool found = false;
     ssize_t sizeOfList;
     libusb_device_descriptor desc;
     libusb_device* device;
-    string mfgsermsg = "?DEV:MFGSER";
-    string retMessage;
+    std::string mfgsermsg = "?DEV:MFGSER";
+    std::string retMessage;
     
     //Check if the product ID is a valid MCC product ID
     if(!isMCCProduct(idProduct))
@@ -252,7 +251,7 @@ unsigned short MCCDevice::getBulkPacketSize(unsigned char* data, int data_length
 
 //Will return at most a 64 character array.
 //Returns response if transfer successful, null if not
-string MCCDevice::sendMessage(string message)
+std::string MCCDevice::sendMessage(std::string message)
 {
     try
     {
@@ -266,7 +265,7 @@ string MCCDevice::sendMessage(string message)
 }
 
 //Send a message to the device
-void MCCDevice::sendControlTransfer(string message)
+void MCCDevice::sendControlTransfer(std::string message)
 {
     int numBytesTransferred;
     
@@ -292,11 +291,11 @@ void MCCDevice::sendControlTransfer(string message)
 
 //Receive a message from the device. This should follow a call to sendControlTransfer.
 //It will return a pointer to at most a 64 character array.
-string MCCDevice::getControlTransfer()
+std::string MCCDevice::getControlTransfer()
 {
     int messageLength;
     unsigned char message[64];
-    string strmessage;
+    std::string strmessage;
     
     messageLength = libusb_control_transfer(dev_handle,  LIBUSB_REQUEST_TYPE_VENDOR + LIBUSB_ENDPOINT_IN,
                                             STRINGMESSAGE, 0, 0, message, 64, 1000);
@@ -369,8 +368,8 @@ void MCCDevice::getBlock()
 void MCCDevice::reconfigure()
 {
     int lowChan, highChan;
-    string respLow, respHigh, respOff, respSlope, respRange, respRate;
-    stringstream strOff, strSlope, strRange;
+    std::string respLow, respHigh, respOff, respSlope, respRange, respRate;
+    std::stringstream strOff, strSlope, strRange;
     respLow = sendMessage("?AISCAN:LOWCHAN");
     lowChan = fromString<int>(respLow.erase(0, 15));
     respHigh = sendMessage("?AISCAN:HIGHCHAN");
