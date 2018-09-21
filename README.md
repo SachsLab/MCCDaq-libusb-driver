@@ -46,7 +46,7 @@ TODO:
 
 # How to use it in Linux - Ubuntu 13.10
 
-1. Install [libusb-1.0](http://libusb.info/) using `sudo apt-get install libusb-1.0`
+1. Install [libusb-1.0](http://libusb.info/) using `sudo apt-get install libusb-1.0-0-dev`
 2. Include mccdevice.h into your project. `#include "mccdevice.h"`
 3. Compile your project:
 
